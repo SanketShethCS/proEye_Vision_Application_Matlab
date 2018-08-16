@@ -1,0 +1,367 @@
+classdef proEye < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure              matlab.ui.Figure
+        UploadyourphotoLabel  matlab.ui.control.Label
+        Label                 matlab.ui.control.Label
+        EditField             matlab.ui.control.EditField
+        BrowseButton          matlab.ui.control.Button
+        Label_2               matlab.ui.control.Label
+        ParametersLabel       matlab.ui.control.Label
+        SaturationLabel       matlab.ui.control.Label
+        HueLabel              matlab.ui.control.Label
+        FaceRatioLabel        matlab.ui.control.Label
+        Label_3               matlab.ui.control.Label
+        Label_4               matlab.ui.control.Label
+        Label_5               matlab.ui.control.Label
+        CheckImageButton      matlab.ui.control.Button
+        proEyebyteammLabel    matlab.ui.control.Label
+    end
+
+    methods (Access = private)
+
+        % Button pushed function: BrowseButton
+        function BrowseButtonPushed(app, event)
+            [file,path,indx] = uigetfile('*.jpg');
+            if isequal(file,0)
+                disp('User selected Cancel')
+            else
+                disp(['User selected ', fullfile(path, file),...
+                    ' and filter index: ', num2str(indx)])
+                app.EditField.Value = fullfile(path, file);
+                disp(fullfile(path, file));
+            end
+        end
+
+        % Button pushed function: CheckImageButton
+        function CheckImageButtonPushed(app, event)
+            
+            imgR = imread(app.EditField.Value);
+            disp(imgR);
+            [flag1,faceAns]=checkFace(imgR);
+           
+            [imag1,BB]=upperCrop(imgR);
+            [imag2,BB2]=faceCrop(imag1);
+            faceRemoved=removeFace(imag1,BB2);
+            [flag2,coverageAns]=coverage(imag1,imag2);
+            app.Label_5.Text = coverageAns;
+            f=removeForeground(faceRemoved,BB,BB2);
+            [flag3,flag4,saturationAns,hueAns]=hsv(f);
+            app.Label_3.Text = saturationAns;
+            app.Label_4.Text = hueAns;
+            if flag1 && flag2 && flag3 && flag4
+                app.Label_2.Text="Congratulations! Image is Valid";
+            else
+                app.Label_2.Text="Try Again! Image is Not Valid";
+            end    
+            %
+            
+            function [imag1,BB]=upperCrop(imgR)
+                [imag1,BB]=upperbody(imgR);
+                figure(4);
+                imshow(imag1);
+            end
+            
+            function [imag2,BB2]=faceCrop(imag1)
+                [imag2, BB2]=face(imag1);
+                figure(5);
+                imshow(imag2);
+            end
+            function faceRemoved=removeFace(imag1,BB2)
+                faceRemoved = imag1;
+                faceRemoved(BB2(2):BB2(2)+BB2(4), BB2(1):BB2(1)+BB2(3),:) = 0;
+                figure(6);
+                imshow(faceRemoved);
+            end
+            
+            
+            function f=removeForeground(faceRemoved,BB,BB2)
+                f=faceRemoved;
+                f(BB2(3)+BB2(2):BB(3),1:BB(3),:) = 0;
+                figure(7);
+                imshow(f);
+            end
+            
+            
+            function [flag3,flag4,saturationAns,hueAns]=hsv(f)
+                newI=rgb2hsv(f);
+                H=newI(:,:,1);
+                H= round(H,1);
+                S=newI(:,:,2);
+                [flag3,saturationAns]=saturation(S);
+                [flag4,hueAns]=hue(H);
+            end
+            
+            
+            function [flag1,answer]=hue(H)
+                totalBracket1=sum(sum((0.1972>H&H>0)));
+                totalBracket2=sum(sum((0.3916>H&H>0.1972)));
+                totalBracket3=sum(sum((0.5916>H&H>0.3916)));
+                totalBracket4=sum(sum((0.7888>H&H>0.5916)));
+                totalBracket5=sum(sum((0.9972>H&H>0.7888)));
+                TotalHues=totalBracket1+totalBracket2+totalBracket3+totalBracket4+totalBracket5;
+                M=[totalBracket1,totalBracket2,totalBracket3,totalBracket4,totalBracket5];
+                Maximum=max(M);
+                index=find(M==Maximum);
+                M(index) = 0;
+                SecondMax=max(M);
+                diff=Maximum-SecondMax;
+                if diff/TotalHues < 0.7
+                    answer="Fail Hue";
+                    flag1=false;
+                    %disp(final);
+                else
+                    flag1=true;
+                    answer="Pass Hue";
+                end
+            end
+            
+            function [flag1,answer]=saturation(S)
+                totalFound=sum(sum((S>0.6)));
+                totalOverall=sum(sum((S>0)));
+                percentS=totalFound/totalOverall;
+                if percentS > 0.05
+                    flag1=false;
+                    answer="Fail Saturation";
+                    %disp(final);
+                else
+                    flag1=true;
+                    answer="Pass Saturation";
+                end
+            end
+            
+            function [flag1,answer]=coverage(imag1,imag2)
+                sizeBigImage=size(imag1);
+                overalPixels=sizeBigImage(1)*sizeBigImage(2);
+                sizeFaceImage=size(imag2);
+                FacePixels=sizeFaceImage(1)*sizeFaceImage(2);
+                TotalRemovedPixels=FacePixels*4;
+                PercentageRemoved=TotalRemovedPixels/overalPixels;
+                if  PercentageRemoved < 0.5
+                    flag1=false;
+                    answer="Fail Coverage";
+                    %disp(final);
+                else
+                    flag1=true;
+                    answer="Pass Coverage";
+                end
+            end
+            
+            function [x, BB2]=face(imag1)
+                img = imag1;
+                FaceDetect = vision.CascadeObjectDetector;
+                FaceDetect.MergeThreshold = 7 ;
+                BB2 = step(FaceDetect,img);
+                for i = 1:size(BB2,1)
+                    rectangle('Position',BB2(i,:),'LineWidth',3,'LineStyle','-','EdgeColor','r');
+                end
+                for i = 1:size(BB2,1)
+                    J= imcrop(img,BB2(i,:));
+                end
+                x=J;
+            end
+            
+            
+            function [f,BB]=upperbody(img)
+                checkFace(img);
+                FaceDetect = vision.CascadeObjectDetector('UpperBody');
+                FaceDetect.MergeThreshold = 7 ;
+                BB = step(FaceDetect,img);
+                for i = 1:size(BB,1)
+                    rectangle('Position',BB(i,:),'LineWidth',3,'LineStyle','-','EdgeColor','r');
+                end
+                for i = 1:size(BB,1)
+                    J= imcrop(img,BB(i,:));
+                end
+                f=J;
+            end
+            
+            
+            
+            function [flag1,x]=checkFace(img)
+                I=img;
+                FDetect = vision.CascadeObjectDetector;
+                %Returns Bounding Box values based on number of objects
+                BB = step(FDetect,I);
+                % % hold on
+                for i = 1:size(BB,1)
+                    rectangle('Position',BB(i,:),'LineWidth',5,'LineStyle','-','EdgeColor','r');
+                end
+                % title('Face Detection');
+                % hold off;
+                
+                %To detect Nose
+                NoseDetect = vision.CascadeObjectDetector('Nose','MergeThreshold',16);
+                BB1=step(NoseDetect,I);
+                
+                for i = 1:size(BB,1)
+                    rectangle('Position',BB(i,:),'LineWidth',4,'LineStyle','-','EdgeColor','b');
+                end
+                % title('Nose Detection');
+                % hold off;
+                
+                %To detect Mouth
+                MouthDetect = vision.CascadeObjectDetector('Mouth','MergeThreshold',16);
+                
+                BB2=step(MouthDetect,I);
+                
+                for i = 1:size(BB,1)
+                    rectangle('Position',BB(i,:),'LineWidth',4,'LineStyle','-','EdgeColor','r');
+                end
+                % title('Mouth Detection');
+                % hold off;
+                
+                %Check if the image has a face
+                if isempty(BB) || isempty(BB1) || isempty(BB2)
+                    flag1=false;
+                    x = 'Fail Check Face';
+                    %disp(x);
+                else
+                    flag1=true;
+                    x = 'Pass Check Face';
+                end
+            end
+        end
+    end
+
+    % App initialization and construction
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure
+            app.UIFigure = uifigure;
+            app.UIFigure.Color = [1 1 1];
+            app.UIFigure.Position = [100 100 638 649];
+            app.UIFigure.Name = 'UI Figure';
+            app.UIFigure.Resize = 'off';
+
+            % Create UploadyourphotoLabel
+            app.UploadyourphotoLabel = uilabel(app.UIFigure);
+            app.UploadyourphotoLabel.FontName = 'Arial';
+            app.UploadyourphotoLabel.FontSize = 18;
+            app.UploadyourphotoLabel.FontWeight = 'bold';
+            app.UploadyourphotoLabel.FontColor = [0 0.451 0.7412];
+            app.UploadyourphotoLabel.Position = [59 458 165 22];
+            app.UploadyourphotoLabel.Text = 'Upload your photo';
+
+            % Create Label
+            app.Label = uilabel(app.UIFigure);
+            app.Label.HorizontalAlignment = 'right';
+            app.Label.Position = [89 423 25 22];
+            app.Label.Text = '';
+
+            % Create EditField
+            app.EditField = uieditfield(app.UIFigure, 'text');
+            app.EditField.Position = [59 423 394 22];
+
+            % Create BrowseButton
+            app.BrowseButton = uibutton(app.UIFigure, 'push');
+            app.BrowseButton.ButtonPushedFcn = createCallbackFcn(app, @BrowseButtonPushed, true);
+            app.BrowseButton.BackgroundColor = [0 0.451 0.7412];
+            app.BrowseButton.FontColor = [1 1 1];
+            app.BrowseButton.Position = [473 423 100 22];
+            app.BrowseButton.Text = 'Browse';
+
+            % Create Label_2
+            app.Label_2 = uilabel(app.UIFigure);
+            app.Label_2.FontSize = 26;
+            app.Label_2.FontWeight = 'bold';
+            app.Label_2.FontAngle = 'italic';
+            app.Label_2.FontColor = [0 0.451 0.7412];
+            app.Label_2.Position = [113 315 516 33];
+            app.Label_2.Text = '';
+
+            % Create ParametersLabel
+            app.ParametersLabel = uilabel(app.UIFigure);
+            app.ParametersLabel.FontName = 'Arial';
+            app.ParametersLabel.FontSize = 22;
+            app.ParametersLabel.FontWeight = 'bold';
+            app.ParametersLabel.FontColor = [0 0.451 0.7412];
+            app.ParametersLabel.Position = [257 250 125 27];
+            app.ParametersLabel.Text = 'Parameters';
+
+            % Create SaturationLabel
+            app.SaturationLabel = uilabel(app.UIFigure);
+            app.SaturationLabel.FontSize = 14;
+            app.SaturationLabel.FontColor = [0 0.451 0.7412];
+            app.SaturationLabel.Position = [151 194 73 22];
+            app.SaturationLabel.Text = 'Saturation:';
+
+            % Create HueLabel
+            app.HueLabel = uilabel(app.UIFigure);
+            app.HueLabel.FontSize = 14;
+            app.HueLabel.FontColor = [0 0.451 0.7412];
+            app.HueLabel.Position = [151 148 35 22];
+            app.HueLabel.Text = 'Hue:';
+
+            % Create FaceRatioLabel
+            app.FaceRatioLabel = uilabel(app.UIFigure);
+            app.FaceRatioLabel.FontSize = 14;
+            app.FaceRatioLabel.FontColor = [0 0.451 0.7412];
+            app.FaceRatioLabel.Position = [151 100 77 22];
+            app.FaceRatioLabel.Text = 'Face Ratio:';
+
+            % Create Label_3
+            app.Label_3 = uilabel(app.UIFigure);
+            app.Label_3.Position = [388 194 144 22];
+            app.Label_3.Text = '';
+
+            % Create Label_4
+            app.Label_4 = uilabel(app.UIFigure);
+            app.Label_4.Position = [388 148 144 22];
+            app.Label_4.Text = '';
+
+            % Create Label_5
+            app.Label_5 = uilabel(app.UIFigure);
+            app.Label_5.Position = [388 100 144 22];
+            app.Label_5.Text = '';
+
+            % Create CheckImageButton
+            app.CheckImageButton = uibutton(app.UIFigure, 'push');
+            app.CheckImageButton.ButtonPushedFcn = createCallbackFcn(app, @CheckImageButtonPushed, true);
+            app.CheckImageButton.BackgroundColor = [0 0.451 0.7412];
+            app.CheckImageButton.FontName = 'Arial';
+            app.CheckImageButton.FontColor = [1 1 1];
+            app.CheckImageButton.Position = [270 385 100 22];
+            app.CheckImageButton.Text = 'Check Image';
+
+            % Create proEyebyteammLabel
+            app.proEyebyteammLabel = uilabel(app.UIFigure);
+            app.proEyebyteammLabel.BackgroundColor = [1 1 1];
+            app.proEyebyteammLabel.FontName = 'Californian FB';
+            app.proEyebyteammLabel.FontSize = 48;
+            app.proEyebyteammLabel.FontWeight = 'bold';
+            app.proEyebyteammLabel.FontAngle = 'italic';
+            app.proEyebyteammLabel.FontColor = [0 0.451 0.7412];
+            app.proEyebyteammLabel.Position = [174 514 352 122];
+            app.proEyebyteammLabel.Text = {'proEye '; '          -by team ''.m'''};
+        end
+    end
+
+    methods (Access = public)
+
+        % Construct app
+        function app = proEye
+
+            % Create and configure components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
